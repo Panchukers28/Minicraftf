@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>MiniCraft</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2ecc71">
+
+<style>
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #87ceeb;
+}
+canvas {
+  display: block;
+}
+#ui {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #222;
+  color: white;
+  padding: 6px;
+  font-family: sans-serif;
+  text-align: center;
+  z-index: 10;
+}
+#controls {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  z-index: 10;
+}
+.btn {
+  width: 55px;
+  height: 55px;
+  margin: 5px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  color: white;
+  font-size: 20px;
+  border: none;
+}
+</style>
+</head>
+
+<body>
+<div id="ui">MiniCraft – App Instalable</div>
+
+<div id="controls">
+  <button class="btn" id="left">◀</button>
+  <button class="btn" id="right">▶</button>
+  <button class="btn" id="jump">⤒</button>
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+// registrar service worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
+}
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const TILE = 32;
+const WORLD_W = 200;
+const WORLD_H = 80;
+
+// bloques
+const AIR = 0;
+const DIRT = 1;
+const GRASS = 2;
+const STONE = 3;
+const WOOD = 4;
+const LEAF = 5;
+
+// mundo
+const world = Array.from({ length: WORLD_H }, () =>
+  Array(WORLD_W).fill(AIR)
+);
+
+// generar terreno
+for (let x = 0; x < WORLD_W; x++) {
+  let ground = 40 + Math.floor(Math.sin(x * 0.2) * 3);
+
+  for (let y = ground; y < WORLD_H; y++) {
+    world[y][x] =
+      y === ground ? GRASS :
+      y < ground + 3 ? DIRT :
+      STONE;
+  }
+
+  // árboles
+  if (Math.random() < 0.08) {
+    for (let t = 1; t < 5; t++) {
+      world[ground - t][x] = WOOD;
+    }
+    for (let lx = -2; lx <= 2; lx++) {
+      for (let ly = -4; ly <= -2; ly++) {
+        if (
+          Math.random() > 0.2 &&
+          world[ground + ly] &&
+          world[ground + ly][x + lx] !== undefined
+        ) {
+          world[ground + ly][x + lx] = LEAF;
+        }
+      }
+    }
+  }
+}
+
+// jugador
+const player = {
+  x: 50,
+  y: 20,
+  vx: 0,
+  vy: 0,
+  w: 20,
+  h: 28,
+  onGround: false
+};
+
+let moveLeft = false;
+let moveRight = false;
+let jump = false;
+
+// botones táctiles
+function bindButton(id, on, off) {
+  const btn = document.getElementById(id);
+  btn.ontouchstart = e => { e.preventDefault(); on(); };
+  btn.ontouchend = e => { e.preventDefault(); off(); };
+}
+
+bindButton('left', () => moveLeft = true, () => moveLeft = false);
+bindButton('right', () => moveRight = true, () => moveRight = false);
+bindButton('jump', () => jump = true, () => jump = false);
+
+function update() {
+  player.vx = moveLeft ? -2 : moveRight ? 2 : 0;
+
+  if (jump && player.onGround) {
+    player.vy = -8;
+    player.onGround = false;
+  }
+
+  player.vy += 0.4;
+  player.x += player.vx;
+  player.y += player.vy;
+
+  const px = Math.floor(player.x / TILE);
+  const py = Math.floor((player.y + player.h) / TILE);
+
+  if (world[py] && world[py][px] !== AIR) {
+    player.y = py * TILE - player.h;
+    player.vy = 0;
+    player.onGround = true;
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const camX = player.x - canvas.width / 2;
+  const camY = player.y - canvas.height / 2;
+
+  for (let y = 0; y < WORLD_H; y++) {
+    for (let x = 0; x < WORLD_W; x++) {
+      const b = world[y][x];
+      if (!b) continue;
+
+      const px = x * TILE - camX;
+      const py = y * TILE - camY;
+
+      if (
+        px < -TILE || py < -TILE ||
+        px > canvas.width || py > canvas.height
+      ) continue;
+
+      ctx.fillStyle =
+        b === DIRT  ? '#8b4513' :
+        b === GRASS ? '#2ecc71' :
+        b === STONE ? '#7f8c8d' :
+        b === WOOD  ? '#a0522d' :
+                      '#27ae60';
+
+      ctx.fillRect(px, py, TILE, TILE);
+    }
+  }
+
+  // jugador
+  ctx.fillStyle = '#3498db';
+  ctx.fillRect(
+    player.x - camX,
+    player.y - camY,
+    player.w,
+    player.h
+  );
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+  </html>
